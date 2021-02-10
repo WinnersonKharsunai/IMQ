@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/WinnersonKharsunai/IMQ/imq-server/internal/storage"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
-// ProcessImqRequest processes the requests sent by client
-func ProcessImqRequest(ctx context.Context, log *logrus.Logger, db storage.DatabaseIF, request *Request) error {
+// ProcessSendMessage processes the requests sent by client
+func ProcessSendMessage(ctx context.Context, log *logrus.Logger, db storage.DatabaseIF, request *Request) error {
 
 	clientID, err := db.GetClientID(ctx, request.ClientName)
 	if err != nil {
@@ -16,7 +17,9 @@ func ProcessImqRequest(ctx context.Context, log *logrus.Logger, db storage.Datab
 	}
 
 	if clientID == "" {
-		clientID, err = db.GenerateClientID(ctx, clientID)
+		clientID = uuid.New().String()
+
+		err = db.StoreNewClientID(ctx, request.ClientName, clientID)
 		if err != nil {
 			return err
 		}

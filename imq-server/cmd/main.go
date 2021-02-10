@@ -4,11 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
-	"github.com/WinnersonKharsunai/IMQ/imq-server/cmd/services"
+	"github.com/WinnersonKharsunai/IMQ/imq-server/cmd/handler"
 	"github.com/WinnersonKharsunai/IMQ/imq-server/config"
 	"github.com/WinnersonKharsunai/IMQ/imq-server/internal/storage"
-	"github.com/kelseyhightower/envconfig"
+	server "github.com/WinnersonKharsunai/IMQ/imq-server/pkg/imq/conn-manager"
+	"github.com/caarlos0/env"
 	"github.com/sirupsen/logrus"
 )
 
@@ -18,9 +24,8 @@ func main() {
 	log.SetFormatter(&logrus.JSONFormatter{})
 
 	// load configuration from environment variables
-	var cfgs config.Settings
-	err := envconfig.Process("", &cfgs)
-	if err != nil {
+	cfgs := config.Settings{}
+	if err := env.Parse(&cfgs); err != nil {
 		log.Fatalf("failed to get configs: %v", err)
 	}
 
@@ -32,8 +37,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	imqService := services.NewImqServerService(db, log)
-
 	addr := fmt.Sprintf("%s:%d", cfgs.ImqServerHost, cfgs.ImqServerPort)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -41,13 +44,41 @@ func main() {
 	}
 	defer lis.Close()
 
-	log.Infof("imq server running on port: %v", addr)
-	for {
-		con, err := lis.Accept()
-		if err != nil {
-			log.Errorf("error while accepting connection: %v", err.Error())
-		}
+	svc := handler.NewSevice(log, db)
 
-		go imqService.HandleImqRequest(context.Background(), con)
+	s := server.NewServer(cfgs.MaxClient, log, svc)
+
+	serverError := make(chan error, 1)
+	shutdown := make(chan os.Signal, 1)
+	defer close(shutdown)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	log.Infof("imq-server running on port: %v", addr)
+	go func() {
+		s.ListenAndServe(lis)
+	}()
+
+	// shutdown
+	select {
+	case err := <-serverError:
+		log.Fatalf("main: fatal error", "error", err)
+	case <-shutdown:
+		log.Infof("main: shutting down imq-server")
+		grace := time.Duration(time.Second * time.Duration(cfgs.ShutdownGrace))
+		ctx, cancel := context.WithTimeout(context.Background(), grace)
+		defer cancel()
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		go func() {
+			if err := s.Shutdown(ctx); err != nil {
+				log.Warnf("graceful shutdown failed: %v", err)
+			}
+			wg.Done()
+		}()
+		wg.Wait()
+
+		log.Infof("main: imq-server stopped: %v", addr)
 	}
 }

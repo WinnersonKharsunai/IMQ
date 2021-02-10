@@ -5,8 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
+	_ "github.com/go-sql-driver/mysql" //...
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -18,12 +17,12 @@ type DatabaseIF interface {
 	Connect() error
 	Test() error
 	GetClientID(ctx context.Context, name string) (string, error)
-	GenerateClientID(ctx context.Context, name string) (string, error)
+	StoreNewClientID(ctx context.Context, clientName, clientID string) error
 	PrepareTableForNewClient(ctx context.Context, clientID string) error
 	StoreClientData(ctx context.Context, clientID string, cd *ClientData) error
 }
 
-// MysqlDB ...
+// MysqlDB is the reciever type for DatabaseIF
 type MysqlDB struct {
 	Dsn string
 	Cxn *sql.DB
@@ -81,19 +80,17 @@ func (mysql *MysqlDB) PrepareTableForNewClient(ctx context.Context, clientID str
 	return nil
 }
 
-// GenerateClientID gets clientId from clients table
-func (mysql *MysqlDB) GenerateClientID(ctx context.Context, name string) (string, error) {
-
-	clientID := uuid.New().String()
+// StoreNewClientID persists the new clientId into Clients table
+func (mysql *MysqlDB) StoreNewClientID(ctx context.Context, clientName, clientID string) error {
 
 	stmt := `INSERT INTO Clients (clientName,clientId) VALUES(?,?)`
 
-	_, err := mysql.Cxn.ExecContext(ctx, stmt, name, clientID)
+	_, err := mysql.Cxn.ExecContext(ctx, stmt, clientName, clientID)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return clientID, nil
+	return nil
 }
 
 // GetClientID gets clientName based on the given clientId
@@ -113,7 +110,7 @@ func (mysql *MysqlDB) GetClientID(ctx context.Context, name string) (string, err
 // StoreClientData persists client data based on the given clientID
 func (mysql *MysqlDB) StoreClientData(ctx context.Context, clientID string, cd *ClientData) error {
 
-	stmt := fmt.Sprintf("INSERT INTO `%v` (createdAt, expiresAt, data) VALUES(%v,%v,%v)", clientID, cd.CreatedAt, cd.ExpiresAt, cd.Data)
+	stmt := fmt.Sprintf("INSERT INTO `%v` (`createdAt`, `expiresAt`, `data`) VALUES ('%v', '%v', '%v')", clientID, cd.CreatedAt, cd.ExpiresAt, cd.Data)
 
 	_, err := mysql.Cxn.ExecContext(ctx, stmt)
 	if err != nil {
