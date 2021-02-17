@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -11,9 +10,11 @@ import (
 	"time"
 
 	"github.com/WinnersonKharsunai/IMQ/imq-server/cmd/handler"
+	"github.com/WinnersonKharsunai/IMQ/imq-server/cmd/routes"
 	"github.com/WinnersonKharsunai/IMQ/imq-server/config"
 	"github.com/WinnersonKharsunai/IMQ/imq-server/internal/storage"
-	server "github.com/WinnersonKharsunai/IMQ/imq-server/pkg/imq/conn-manager"
+	"github.com/WinnersonKharsunai/IMQ/imq-server/pkg/protocol"
+	"github.com/WinnersonKharsunai/IMQ/imq-server/pkg/server"
 	"github.com/caarlos0/env"
 	"github.com/sirupsen/logrus"
 )
@@ -26,7 +27,7 @@ func main() {
 	// load configuration from environment variables
 	cfgs := config.Settings{}
 	if err := env.Parse(&cfgs); err != nil {
-		log.Fatalf("failed to get configs: %v", err)
+		log.Fatalf("main: failed to get configs: %v", err)
 	}
 
 	// configure application and start service
@@ -37,31 +38,26 @@ func main() {
 		log.Fatal(err)
 	}
 
-	addr := fmt.Sprintf("%s:%d", cfgs.ImqServerHost, cfgs.ImqServerPort)
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("failed to start imq server on %s: %v", addr, err)
-	}
-	defer lis.Close()
-
 	svc := handler.NewSevice(log, db)
 
-	s := server.NewServer(cfgs.MaxClient, log, svc)
+	p := protocol.NewProtocol()
 
-	serverError := make(chan error, 1)
+	r := routes.NewRouter(svc, p)
+
+	addr := fmt.Sprintf("%s:%d", cfgs.ImqServerHost, cfgs.ImqServerPort)
+	s := server.NewServer(log, addr, r)
+
+	log.Infof("main: imq-server running on port: %v", addr)
+	if err := s.ListenAndServe(); err != nil {
+		log.Fatalf("main: fatal error: %v", err)
+	}
+
+	// graceful shutdown
 	shutdown := make(chan os.Signal, 1)
-	defer close(shutdown)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer close(shutdown)
 
-	log.Infof("imq-server running on port: %v", addr)
-	go func() {
-		s.ListenAndServe(lis)
-	}()
-
-	// shutdown
 	select {
-	case err := <-serverError:
-		log.Fatalf("main: fatal error", "error", err)
 	case <-shutdown:
 		log.Infof("main: shutting down imq-server")
 		grace := time.Duration(time.Second * time.Duration(cfgs.ShutdownGrace))
@@ -73,7 +69,7 @@ func main() {
 
 		go func() {
 			if err := s.Shutdown(ctx); err != nil {
-				log.Warnf("graceful shutdown failed: %v", err)
+				log.Warnf("main: graceful shutdown failed: %v", err)
 			}
 			wg.Done()
 		}()

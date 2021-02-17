@@ -11,13 +11,13 @@ type Message struct {
 // Request type holds client's request
 type Request struct {
 	Header Header      `json:"header"`
+	Method string      `json:"method"`
 	Body   interface{} `json:"body"`
 }
 
 // Header ...
 type Header struct {
 	Version string `json:"version"`
-	Method  string `json:"method"`
 }
 
 // SendMessageRequest ...

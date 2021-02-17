@@ -4,8 +4,7 @@ package config
 type Settings struct {
 	ImqServerHost string `env:"IMQ_SERVER_HOST" envDefault:"localhost"`
 	ImqServerPort int    `env:"IMQ_SERVER_PORT" envDefault:"80"`
-	ShutdownGrace int    `env:"SHUTDOWN_GRACE" envDefault:"5"`
-	MaxClient     int    `env:"MAX_CLIENT" envDefault:"1"`
+	ShutdownGrace int    `env:"SHUTDOWN_GRACE" envDefault:"10"`
 
 	DbUserName string `env:"DB_USERNAME" envDefault:"root"`
 	DbPassword string `env:"DB_PASSWORD" envDefault:"password"`

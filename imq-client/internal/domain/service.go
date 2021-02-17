@@ -17,9 +17,9 @@ func PrepareClientRequest(clientName, data string) Request {
 	request := Request{
 		Header: Header{
 			Version: "1.0",
-			Method:  "SendMessage",
 		},
-		Body: sm,
+		Method: "SendMessage",
+		Body:   sm,
 	}
 
 	return request

@@ -2,32 +2,29 @@ package handler
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/WinnersonKharsunai/IMQ/imq-server/internal/domain"
 	"github.com/WinnersonKharsunai/IMQ/imq-server/internal/storage"
-	server "github.com/WinnersonKharsunai/IMQ/imq-server/pkg/imq/conn-manager"
+	"github.com/WinnersonKharsunai/IMQ/imq-server/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
-// ServerService is the reciever type
+// ServerService is the receiver type
 type ServerService struct {
-	db  storage.DatabaseIF
 	log *logrus.Logger
+	db  storage.DatabaseIF
 }
 
 // NewSevice is the factory function for ServerService
-func NewSevice(log *logrus.Logger, db storage.DatabaseIF) server.ImqServerServiceIF {
+func NewSevice(log *logrus.Logger, db storage.DatabaseIF) services.ImqServiceIF {
 	return &ServerService{
-		db:  db,
 		log: log,
+		db:  db,
 	}
 }
 
 // SendMessage recieve and persists client message
-func (s *ServerService) SendMessage(ctx context.Context, in *server.SendMessageRequest) (*server.SendMessageResponse, error) {
-
-	fmt.Println("request recieved:", in)
+func (s *ServerService) SendMessage(ctx context.Context, in *services.SendMessageRequest) (*services.SendMessageResponse, error) {
 
 	request := &domain.Request{
 		ClientName: in.ClientName,
@@ -40,7 +37,12 @@ func (s *ServerService) SendMessage(ctx context.Context, in *server.SendMessageR
 
 	if err := domain.ProcessSendMessage(ctx, s.log, s.db, request); err != nil {
 		s.log.Errorf("failed to process client request: %v", err)
+		return nil, err
 	}
 
-	return &server.SendMessageResponse{}, nil
+	return &services.SendMessageResponse{
+		Data:      in.Data,
+		CreatedAt: in.CreatedAt,
+		ExpireAt:  in.CreatedAt,
+	}, nil
 }
