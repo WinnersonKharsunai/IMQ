@@ -11,51 +11,51 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// ImqClientService is the reciever type
-type ImqClientService struct {
+// ClientService is the reciever type
+type ClientService struct {
 	log *logrus.Logger
 }
 
-// NewImqClientService is the factory function for ImqClientService
-func NewImqClientService(l *logrus.Logger) *ImqClientService {
-	return &ImqClientService{
+// NewClientService is the factory function for ImqClientService
+func NewClientService(l *logrus.Logger) *ClientService {
+	return &ClientService{
 		log: l,
 	}
 }
 
 // HandleImqRequest ...
-func (imq *ImqClientService) HandleImqRequest(con net.Conn) {
+func (c *ClientService) HandleImqRequest(con net.Conn) {
 
 	clientName, err := getClientName()
 	if err != nil {
-		imq.log.Errorf("failed to get client name: %v", err)
+		c.log.Errorf("failed to get client name: %v", err)
 	}
 
 	for {
 		msg, err := getMessage()
 		if err != nil {
-			imq.log.Errorf("failed to read input message: %v", err)
+			c.log.Errorf("failed to read input message: %v", err)
 		}
 
 		request := domain.PrepareClientRequest(clientName, msg)
 
 		requestBody, err := marshalRequest(request)
 		if err != nil {
-			imq.log.Errorf("failed to marshal request: %v", err)
+			c.log.Errorf("failed to marshal request: %v", err)
 		}
 
 		fmt.Println("request sent:", requestBody)
 		_, err = fmt.Fprintf(con, requestBody)
 		if err != nil {
-			imq.log.Errorf("failed to send request to server: %v", err)
+			c.log.Errorf("failed to send request to server: %v", err)
 		}
 
 		response, err := bufio.NewReader(con).ReadString('\n')
 		if err != nil {
-			imq.log.Errorf("failed to recieved respose: %v", err)
+			c.log.Errorf("failed to recieved respose: %v", err)
 		}
 
-		imq.log.Infof("recieved: %v", response)
+		c.log.Infof("recieved: %v", response)
 	}
 }
 

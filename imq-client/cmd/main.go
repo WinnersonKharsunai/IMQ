@@ -1,11 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/WinnersonKharsunai/IMQ/imq-client/cmd/handler"
 	"github.com/WinnersonKharsunai/IMQ/imq-client/config"
+	"github.com/WinnersonKharsunai/IMQ/imq-client/pkg/client"
 	"github.com/caarlos0/env"
 	"github.com/sirupsen/logrus"
 )
@@ -23,16 +29,40 @@ func main() {
 
 	// configure application and start service
 
-	imqService := handler.NewImqClientService(log)
+	svc := handler.NewClientService(log)
 
 	addr := fmt.Sprintf("%s:%d", cfgs.ImqClientHost, cfgs.ImqClientPort)
-	con, err := net.Dial("tcp", addr)
-	if err != nil {
+
+	//log.Infof("main: imq-client dialing on port: %s", addr)
+	c := client.NewClient(addr, svc)
+
+	if err := c.Dial(); err != nil {
 		log.Fatalf("failed to start connection: %v", err)
 	}
-	defer con.Close()
 
-	for {
-		imqService.HandleImqRequest(con)
+	// graceful shutdown
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer close(shutdown)
+
+	select {
+	case <-shutdown:
+		log.Infof("\nmain: shutting down imq-server")
+		grace := time.Duration(time.Second * time.Duration(cfgs.ShutdownGrace))
+		ctx, cancel := context.WithTimeout(context.Background(), grace)
+		defer cancel()
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		go func() {
+			if err := c.Shutdown(ctx); err != nil {
+				log.Warnf("main: graceful shutdown failed: %v", err)
+			}
+			wg.Done()
+		}()
+		wg.Wait()
+
+		log.Infof("main: imq-server stopped: %v", addr)
 	}
 }
